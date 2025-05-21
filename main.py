@@ -4,6 +4,47 @@ import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox
 
+translations = {
+    "ru": {
+        "title": "Dune: War for Arrakis - Калькулятор боя",
+        "attacker_frame": "Атакующий",
+        "defender_frame": "Защитник",
+        "normal_units": "Обычные отряды:",
+        "elite_units": "Элитные отряды:",
+        "special_elite_units": "Особые элитные отряды:",
+        "normal_leaders": "Обычные лидеры:",
+        "cards": "Карты (доп. кубики):",
+        "atreides_fremen": "Лидеры Атрейдес/Фримен:",
+        "harkonnen_corrino": "Лидеры Харконнен/Коррино:",
+        "sudden_attack": "Внезапная атака",
+        "settlement_attack": "Атака на поселение (штраф атакующему)",
+        "calculate_battle": "Рассчитать бой",
+        "show_log": "Показать лог боя",
+        "error_title": "Ошибка",
+        "error_total_units": "Суммарно можно не более 6 отрядов!"
+        # ... другие строки и сообщения ...
+    },
+    "en": {
+        "title": "Dune: War for Arrakis - Battle Calculator",
+        "attacker_frame": "Attacker",
+        "defender_frame": "Defender",
+        "normal_units": "Normal units:",
+        "elite_units": "Elite units:",
+        "special_elite_units": "Special elite units:",
+        "normal_leaders": "Normal leaders:",
+        "cards": "Cards (extra dice):",
+        "atreides_fremen": "Leaders Atreides/Fremen:",
+        "harkonnen_corrino": "Leaders Harkonnen/Corrino:",
+        "sudden_attack": "Sudden attack",
+        "settlement_attack": "Attack on settlement (penalty to attacker)",
+        "calculate_battle": "Calculate battle",
+        "show_log": "Show battle log",
+        "error_title": "Error",
+        "error_total_units": "Total units cannot exceed 6!"
+    }
+}
+current_lang = "ru"  # глобальная переменная или атрибут текущего языка (по умолчанию русский)
+
 # Данные специальных лидеров: сколько мечей и щитов даёт каждый лидер при использовании символа "особый"
 special_leaders_data = {
     "Paul Muad'Dib": {"swords": 2, "shields": 1},
@@ -442,9 +483,9 @@ ttk.Spinbox(def_frame, from_=0, to=10, textvariable=defender_cards_var, width=5)
 # Флажки для особых лидеров защитника
 def_special_vars = {name: tk.BooleanVar(value=False) for name in special_leaders_data.keys()}
 row_index = 6
-ttk.Label(def_frame, text="Лидеры Атрейдес/Фримен:").grid(row=6, column=0, columnspan=2, sticky="w", pady=(5,0))
+ttk.Label(def_frame, text="Лидеры Атрейдес/Фримен:").grid(row=6, column=0, columnspan=2, sticky="w", pady=(15,0))
 row_index += 1
-for name in ["Paul Muad'Dib", "Lady Jessica", "Gurney Halleck", "Alia", "Stilgar", "Chani"]:
+for name in ["Paul Atreides", "Paul Muad'Dib", "Lady Jessica", "Mother Jessica", "Gurney Halleck", "Alia", "Stilgar", "Chani"]:
     ttk.Checkbutton(def_frame, text=name, variable=def_special_vars[name]).grid(row=row_index, column=0, columnspan=2, sticky="w")
     row_index += 1
 ttk.Label(def_frame, text="Лидеры Харконнен/Коррино:").grid(row=row_index, column=0, columnspan=2, sticky="w", pady=(5,0))
