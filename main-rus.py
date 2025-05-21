@@ -4,48 +4,6 @@ import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox
 
-translations = {
-    "ru": {
-        "title": "Dune: War for Arrakis - Калькулятор боя",
-        "attacker_frame": "Атакующий",
-        "defender_frame": "Защитник",
-        "normal_units": "Обычные отряды:",
-        "elite_units": "Элитные отряды:",
-        "special_elite_units": "Особые элитные отряды:",
-        "normal_leaders": "Обычные лидеры:",
-        "cards": "Карты (доп. кубики):",
-        "atreides_fremen": "Лидеры Атрейдес/Фримен:",
-        "harkonnen_corrino": "Лидеры Харконнен/Коррино:",
-        "sudden_attack": "Внезапная атака",
-        "settlement_attack": "Атака на поселение (штраф атакующему)",
-        "calculate_battle": "Рассчитать бой",
-        "show_log": "Показать лог боя",
-        "error_title": "Ошибка",
-        "error_total_units": "Суммарно можно не более 6 отрядов!"
-        # ... другие строки и сообщения ...
-    },
-    "en": {
-        "title": "Dune: War for Arrakis - Battle Calculator",
-        "attacker_frame": "Attacker",
-        "defender_frame": "Defender",
-        "normal_units": "Normal units:",
-        "elite_units": "Elite units:",
-        "special_elite_units": "Special elite units:",
-        "normal_leaders": "Normal leaders:",
-        "cards": "Cards (extra dice):",
-        "atreides_fremen": "Leaders Atreides/Fremen:",
-        "harkonnen_corrino": "Leaders Harkonnen/Corrino:",
-        "sudden_attack": "Sudden attack",
-        "settlement_attack": "Attack on settlement (penalty to attacker)",
-        "calculate_battle": "Calculate battle",
-        "show_log": "Show battle log",
-        "error_title": "Error",
-        "error_total_units": "Total units cannot exceed 6!"
-    }
-}
-current_lang = "ru"  # глобальная переменная или атрибут текущего языка (по умолчанию русский)
-
-# Данные специальных лидеров: сколько мечей и щитов даёт каждый лидер при использовании символа "особый"
 special_leaders_data = {
     "Paul Muad'Dib": {"swords": 2, "shields": 1},
     "Paul Atreides": {"swords": 1, "shields": 0},
@@ -64,9 +22,7 @@ special_leaders_data = {
     "Captain Aramsham": {"swords": 2, "shields": 0}
 }
 
-# Функция для форматирования числительных (мечей, щитов, символов) с правильным окончанием
 def format_count(num, forms):
-    # forms: (единственное, родит. ед., родит. мн.)
     if num % 10 == 1 and num % 100 != 11:
         return f"{num} {forms[0]}"
     elif 2 <= num % 10 <= 4 and not (12 <= num % 100 <= 14):
@@ -74,11 +30,9 @@ def format_count(num, forms):
     else:
         return f"{num} {forms[2]}"
 
-# Применение урона к армии с учётом приоритетов
 def allocate_casualties(side_name, casualties, state, log_active=True):
     log = []
     while casualties > 0:
-        # Понизить элитный отряд до обычного
         if casualties > 0 and state['elite'] > 0:
             state['elite'] -= 1
             state['normal'] += 1
@@ -86,7 +40,6 @@ def allocate_casualties(side_name, casualties, state, log_active=True):
             if log_active:
                 log.append(f"{side_name}: элитный отряд понижен до обычного.")
             continue
-        # Убрать обычного (безымянного) лидера
         if casualties > 0 and state['normal_leader'] > 0:
             state['normal_leader'] -= 1
             casualties -= 1
