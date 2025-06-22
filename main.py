@@ -14,6 +14,9 @@ text = {
         'normal_leaders': "Обычные лидеры:",
         'cards': "Карты (доп. кубики):",
         'sudden_attack': "Внезапная атака",
+        'ongoing_attack': "Атака +1 кубик",
+        'sardaukar_attack': "Атака сардаукарами",
+        'sudden_attack_4max': "Внезапная атака 4max",
         'settlement_dice': "Поселение (кубики):",
         'atreides_fremen_leaders': "Лидеры Атрейдес/Фримен:",
         'harkonnen_corino_leaders': "Лидеры Харконнен/Коррино:",
@@ -35,7 +38,10 @@ text = {
         'strongest_leader_survival_att': "Шанс выживания самого сильного лидера атакующего",
         'strongest_leader_survival_def': "Шанс выживания самого сильного лидера защитника",
         'battle_log_title': "Лог боя",
-        'assault_damage': "Атакующий наносит урон за штурм"
+        'assault_damage': "Атакующий наносит урон за штурм",
+        'worm_attack_normal': "Атака червем",
+        'worm_attack_shai': "Атака Шай-Хулуд",
+        'ongoing_attack_log': "Атака +1 кубик: атакующий получает +1 кубик в этом раунде."
     },
     'en': {
         'title': "Dune: War for Arrakis - Battle Calculator",
@@ -47,6 +53,9 @@ text = {
         'normal_leaders': "Normal leaders:",
         'cards': "Cards (extra dice):",
         'sudden_attack': "Sudden Attack",
+        'ongoing_attack': "Attack +1 die",
+        'sardaukar_attack': "Sardaukar Attack",
+        'sudden_attack_4max': "Sudden Attack (max 4 dice)",
         'settlement_dice': "Settlement (dice):",
         'atreides_fremen_leaders': "Atreides/Fremen Leaders:",
         'harkonnen_corino_leaders': "Harkonnen/Corino Leaders:",
@@ -68,7 +77,10 @@ text = {
         'strongest_leader_survival_att': "Chance of attacker's strongest leader surviving",
         'strongest_leader_survival_def': "Chance of defender's strongest leader surviving",
         'battle_log_title': "Battle Log",
-        'assault_damage': "Attacker suffers assault damage"
+        'assault_damage': "Attacker suffers assault damage",
+        'worm_attack_normal': "Worm attack (normal)",
+        'worm_attack_shai': "Worm attack (Shai-Hulud)",
+        'ongoing_attack_log': "Ongoing attack: attacker gains +1 die this round."
     }
 }
 
@@ -80,6 +92,7 @@ special_leaders_data = {
     "Lady Jessica": {"swords": 0, "shields": 1},
     "Mother Jessica": {"swords": 0, "shields": 2},
     "Gurney Halleck": {"swords": 2, "shields": 1},
+    "Stabban Tuek": {"swords": 1, "shields": 1},
     "Alia": {"swords": 1, "shields": 0},
     "Stilgar": {"swords": 2, "shields": 0},
     "Chani": {"swords": 1, "shields": 1},
@@ -108,8 +121,110 @@ def format_count(num, forms):
         # Непредвиденное количество форм - возвращаем число и первую форму как есть
         return f"{num} {forms[0]}"
 
-def allocate_casualties(side_name, casualties, state, log_active=True):
+def allocate_casualties(side_name, casualties, state, log_active=True, settlement_flag=False):
     log = []
+    if settlement_flag:
+        # Специальный порядок распределения попаданий при атаке на поселение
+        while casualties > 0:
+            # Понизить элитный отряд до обычного
+            if casualties > 0 and state['elite'] > 0:
+                state['elite'] -= 1
+                state['normal'] += 1
+                casualties -= 1
+                if log_active:
+                    if current_lang == 'ru':
+                        log.append(f"{side_name}: элитный отряд понижен до обычного.")
+                    else:
+                        log.append(f"{side_name}: elite unit downgraded to normal.")
+                continue
+            # Удалить обычного (безымянного) лидера
+            if casualties > 0 and state['normal_leader'] > 0:
+                state['normal_leader'] -= 1
+                casualties -= 1
+                if log_active:
+                    if current_lang == 'ru':
+                        log.append(f"{side_name}: обычный лидер убит.")
+                    else:
+                        log.append(f"{side_name}: normal leader killed.")
+                continue
+            # Удалить обычные отряды, если суммарная сила с поселением все еще 6
+            if casualties > 0 and state['normal'] > 0:
+                total_units = state['normal'] + state['elite'] + state['special_elite']
+                if total_units + state.get('settlement', 0) >= 6:
+                    # Удалить обычные отряды, чтобы снизить силу ниже 6 (или пока хватает попаданий)
+                    to_kill = min(casualties, state['normal'], (total_units + state.get('settlement', 0) - 5))
+                    state['normal'] -= to_kill
+                    casualties -= to_kill
+                    if log_active and to_kill > 0:
+                        if to_kill == 1:
+                            if current_lang == 'ru':
+                                log.append(f"{side_name}: 1 обычный отряд уничтожен.")
+                            else:
+                                log.append(f"{side_name}: 1 normal unit destroyed.")
+                        else:
+                            if current_lang == 'ru':
+                                log.append(f"{side_name}: {to_kill} обычных отрядов уничтожено.")
+                            else:
+                                log.append(f"{side_name}: {to_kill} normal units destroyed.")
+                    continue
+            # Понизить особый элитный отряд до обычного
+            if casualties > 0 and state['special_elite'] > 0:
+                state['special_elite'] -= 1
+                state['normal'] += 1
+                casualties -= 1
+                if log_active:
+                    if current_lang == 'ru':
+                        log.append(f"{side_name}: особый элитный отряд понижен до обычного.")
+                    else:
+                        log.append(f"{side_name}: special elite unit downgraded to normal.")
+                continue
+            # Удалить любого оставшегося особого лидера (самого слабого)
+            if casualties > 0 and len(state['special_leaders']) > 0:
+                weakest = min(state['special_leaders'], key=lambda name: special_leaders_data[name]['swords'] + special_leaders_data[name]['shields'])
+                state['special_leaders'].remove(weakest)
+                casualties -= 1
+                if log_active:
+                    if current_lang == 'ru':
+                        log.append(f"{side_name}: особый лидер {weakest} убит.")
+                    else:
+                        log.append(f"{side_name}: special leader {weakest} killed.")
+                continue
+            # Удалить оставшиеся обычные отряды
+            if casualties > 0 and state['normal'] > 0:
+                if casualties >= state['normal']:
+                    num = state['normal']
+                    state['normal'] = 0
+                    casualties -= num
+                    if log_active:
+                        if num == 1:
+                            if current_lang == 'ru':
+                                log.append(f"{side_name}: 1 обычный отряд уничтожен.")
+                            else:
+                                log.append(f"{side_name}: 1 normal unit destroyed.")
+                        else:
+                            if current_lang == 'ru':
+                                log.append(f"{side_name}: {num} обычных отрядов уничтожено.")
+                            else:
+                                log.append(f"{side_name}: {num} normal units destroyed.")
+                else:
+                    num = casualties
+                    state['normal'] -= num
+                    casualties = 0
+                    if log_active:
+                        if num == 1:
+                            if current_lang == 'ru':
+                                log.append(f"{side_name}: 1 обычный отряд уничтожен.")
+                            else:
+                                log.append(f"{side_name}: 1 normal unit destroyed.")
+                        else:
+                            if current_lang == 'ru':
+                                log.append(f"{side_name}: {num} обычных отрядов уничтожено.")
+                            else:
+                                log.append(f"{side_name}: {num} normal units destroyed.")
+                continue
+            break
+        return log
+    # Стандартный порядок распределения попаданий
     while casualties > 0:
         # Понизить элитный отряд до обычного
         if casualties > 0 and state['elite'] > 0:
@@ -171,7 +286,7 @@ def allocate_casualties(side_name, casualties, state, log_active=True):
                     else:
                         log.append(f"{side_name}: {to_kill} normal units destroyed.")
             continue
-        # Удалить любого оставшегося особого лидера (если остались)
+        # Удалить оставшегося особого лидера (если остались)
         if casualties > 0 and len(state['special_leaders']) > 0:
             weakest = min(state['special_leaders'], key=lambda name: special_leaders_data[name]['swords'] + special_leaders_data[name]['shields'])
             state['special_leaders'].remove(weakest)
@@ -218,16 +333,40 @@ def allocate_casualties(side_name, casualties, state, log_active=True):
         break
     return log
 
-def simulate_battle(att, deff, settlement=False, sudden_attack=False, log_active=True):
+def simulate_battle(att, deff, settlement=False, sudden_attack=False, sudden_attack_4max=False, ongoing_attack=False, sardaukar_attack=False, worm_attack_normal=False, worm_attack_shai=False, log_active=True):
     att_state = copy.deepcopy(att)
     def_state = copy.deepcopy(deff)
     log = []
+    # Pre-battle worm attack effect
+    if worm_attack_normal or worm_attack_shai:
+        dice = 4 if worm_attack_normal else 6
+        hits = 0
+        for _ in range(dice):
+            roll = random.randint(1, 6)
+            if roll <= 3:
+                hits += 1
+        if log_active:
+            if current_lang == 'ru':
+                hit_str = format_count(hits, ("попадание", "попадания", "попаданий"))
+                log.append(f"Атака червями ({'обычная' if worm_attack_normal else 'Шай-Хулуд'}): атакующий перед боем нанес {hit_str}.")
+            else:
+                hit_str = format_count(hits, ("hit", "hits"))
+                log.append(f"Worm attack ({'normal' if worm_attack_normal else 'Shai-Hulud'}): attacker inflicted {hit_str} before the battle.")
+        worm_log = allocate_casualties(text[current_lang]['defender_frame'], hits, def_state, log_active=log_active)
+        if log_active:
+            log.extend(worm_log)
     # Обработка внезапной атаки (логируем сразу, эффект применим в первом раунде)
-    if sudden_attack and log_active:
+    if (sudden_attack or sudden_attack_4max) and log_active:
         if current_lang == 'ru':
-            log.append("Внезапная атака: атакующий получает +1 особый символ (звезда) в этом раунде.")
+            if sudden_attack_4max:
+                log.append("Внезапная атака (4 макс): атакующий получает +1 особый символ (звезда) в этом раунде, защитник бросает не более 4 кубиков.")
+            else:
+                log.append("Внезапная атака: атакующий получает +1 особый символ (звезда) в этом раунде.")
         else:
-            log.append("Sudden attack: attacker gains +1 special symbol (star) this round.")
+            if sudden_attack_4max:
+                log.append("Sudden attack (4 max): attacker gains +1 special symbol (star) this round, defender rolls at most 4 dice.")
+            else:
+                log.append("Sudden attack: attacker gains +1 special symbol (star) this round.")
     round_num = 1
     # Боевые раунды
     while True:
@@ -240,12 +379,29 @@ def simulate_battle(att, deff, settlement=False, sudden_attack=False, log_active
         att_cards_left = att_state.get('cards_left', att_state.get('cards', 0))
         def_cards_left = def_state.get('cards_left', def_state.get('cards', 0))
         att_cards_this_round = min(att_cards_left, max(0, 6 - att_units_count))
-        def_cards_this_round = min(def_cards_left, max(0, 6 - def_units_count))
+        if round_num == 1 and (sudden_attack or sudden_attack_4max):
+            def_cards_this_round = 0
+            if sudden_attack_4max:
+                defender_dice = min(4, def_units_count + def_state.get('settlement', 0))
+            else:
+                defender_dice = min(6, def_units_count + def_state.get('settlement', 0))
+        else:
+            def_cards_this_round = min(def_cards_left, max(0, 6 - def_units_count))
+            defender_dice = min(6, def_units_count + def_cards_this_round + def_state.get('settlement', 0))
         attacker_dice = min(6, att_units_count + att_cards_this_round)
-        defender_dice = min(6, def_units_count + def_cards_this_round + def_state.get('settlement', 0))
         # Обновляем оставшиеся карты
         att_state['cards_left'] = att_cards_left - att_cards_this_round
-        def_state['cards_left'] = def_cards_left - def_cards_this_round
+        if (sudden_attack or sudden_attack_4max) and round_num == 1:
+            def_state['cards_left'] = def_cards_left
+        else:
+            def_state['cards_left'] = def_cards_left - def_cards_this_round
+
+        # Добавочный куб от постоянной атаки
+        if ongoing_attack:
+            attacker_dice = min(6, attacker_dice + 1)
+            if log_active:
+                log.append(text[current_lang]['ongoing_attack_log'])
+
         # Броски кубиков атакующего
         a_swords = a_shields = a_stars = 0
         for _ in range(attacker_dice):
@@ -267,7 +423,7 @@ def simulate_battle(att, deff, settlement=False, sudden_attack=False, log_active
             else:
                 d_stars += 1
         # Применение эффекта внезапной атаки в первом раунде (+1 особый символ атакующему)
-        if sudden_attack and round_num == 1:
+        if (sudden_attack or sudden_attack_4max) and round_num == 1:
             a_stars += 1
         # Общее количество лидеров у каждой стороны (для использования особых символов)
         total_att_leaders = att_state['normal_leader'] + len(att_state['special_leaders'])
@@ -341,13 +497,7 @@ def simulate_battle(att, deff, settlement=False, sudden_attack=False, log_active
         # Подсчет попаданий (мечи минус щиты противника)
         hits_on_def = total_a_swords - total_d_shields  # попаданий по защитнику
         hits_on_att = total_d_swords - total_a_shields  # попаданий по атакующему
-        # Штраф атакующему за бой на поселении: +1 попадание (если защитник еще имеет силы)
-        def_units_after = def_state['normal'] + def_state['elite'] + def_state['special_elite']
-        if settlement and def_units_after > 0:
-            penalty = 1
-            penalty_log = allocate_casualties(text[current_lang]['assault_damage'], penalty, att_state, log_active=log_active)
-            if log_active:
-                log.extend(penalty_log)
+
         # Логирование результатов раунда
         if log_active:
             # Броски атакующего
@@ -457,7 +607,7 @@ def simulate_battle(att, deff, settlement=False, sudden_attack=False, log_active
                 log.append(f"Damage dealt: attacker took {hits_on_att} {'hit' if hits_on_att == 1 else 'hits'}, defender took {hits_on_def} {'hit' if hits_on_def == 1 else 'hits'}.")
         # Применение попаданий (урона) к отрядам
         if hits_on_def > 0:
-            def_casualty_log = allocate_casualties(text[current_lang]['defender_frame'], hits_on_def, def_state, log_active=log_active)
+            def_casualty_log = allocate_casualties(text[current_lang]['defender_frame'], hits_on_def, def_state, log_active=log_active, settlement_flag=settlement)
             if log_active:
                 log.extend(def_casualty_log)
         if hits_on_att > 0:
@@ -469,6 +619,21 @@ def simulate_battle(att, deff, settlement=False, sudden_attack=False, log_active
         def_units_alive = def_state['normal'] + def_state['elite'] + def_state['special_elite']
         if att_units_alive == 0 or def_units_alive == 0:
             break  # бой завершается, если одна сторона полностью уничтожена
+        # Штраф атакующему за бой на поселении: +1 попадание (если защитник еще имеет силы)
+        def_units_after = def_state['normal'] + def_state['elite'] + def_state['special_elite']
+        if settlement and def_units_after > 0 and not sardaukar_attack:
+            penalty = 1
+            penalty_log = allocate_casualties(text[current_lang]['assault_damage'], penalty, att_state,
+                                              log_active=log_active)
+            if log_active:
+                log.extend(penalty_log)
+        # Логирование состояния после раунда
+        if log_active:
+            att_special_leaders = ", ".join(att_state['special_leaders']) if att_state['special_leaders'] else "нет"
+            def_special_leaders = ", ".join(def_state['special_leaders']) if def_state['special_leaders'] else "нет"
+            log.append(f"Конец раунда {round_num}: атакующий - обычных отрядов: {att_state['normal']}, элитных: {att_state['elite']}, особых элитных: {att_state['special_elite']}; обычных лидеров: {att_state['normal_leader']}, особых лидеров: {att_special_leaders}.")
+            log.append(f"Конец раунда {round_num}: защитник - обычных отрядов: {def_state['normal']}, элитных: {def_state['elite']}, особых элитных: {def_state['special_elite']}; обычных лидеров: {def_state['normal_leader']}, особых лидеров: {def_special_leaders}.")
+            log.append("----")
         round_num += 1
     # Результаты боя после завершения всех раундов
     att_units = att_state['normal'] + att_state['elite'] + att_state['special_elite']
@@ -534,7 +699,11 @@ def run_calculation():
         "special_leaders": [name for name, var in att_special_vars.items() if var.get()],
         "cards": attacker_cards_var.get(),
         "cards_left": attacker_cards_var.get(),
-        "sudden_attack": sudden_attack_var.get()
+        "sudden_attack": sudden_attack_var.get(),
+        "sardaukar_attack": sardaukar_attack_var.get(),
+        "sudden_attack_4max": sudden_attack_4max_var.get(),
+        "worm_attack_normal": worm_attack_normal_var.get(),
+        "worm_attack_shai": worm_attack_shai_var.get()
     }
     def_state = {
         "normal": defender_normal_var.get(),
@@ -569,7 +738,7 @@ def run_calculation():
     def_strongest_name = ""
     for _ in range(simulations):
         outcome, att_left, def_left, att_leader_alive, def_leader_alive, att_strongest, def_strongest = simulate_battle(
-            att_state, def_state, settlement=settlement_var.get(), sudden_attack=sudden_attack_var.get(), log_active=False
+            att_state, def_state, settlement=settlement_var.get(), sudden_attack=sudden_attack_var.get(), sudden_attack_4max=sudden_attack_4max_var.get(), sardaukar_attack=sardaukar_attack_var.get(), worm_attack_normal=worm_attack_normal_var.get(), worm_attack_shai=worm_attack_shai_var.get(), ongoing_attack=ongoing_attack_var.get(), log_active=False
         )
         if outcome == "Attacker wins":
             attacker_wins += 1
@@ -619,6 +788,10 @@ def show_log():
         "normal_leader": attacker_normal_leader_var.get(),
         "special_leaders": [name for name, var in att_special_vars.items() if var.get()],
         "sudden_attack": sudden_attack_var.get(),
+        "sardaukar_attack": sardaukar_attack_var.get(),
+        "sudden_attack_4max": sudden_attack_4max_var.get(),
+        "worm_attack_normal": worm_attack_normal_var.get(),
+        "worm_attack_shai": worm_attack_shai_var.get(),
         "cards": attacker_cards_var.get(),
         "cards_left": attacker_cards_var.get()
     }
@@ -645,7 +818,7 @@ def show_log():
         messagebox.showerror(text[current_lang]['error_title'], error_msg)
         return
     # Получение детального лога одного боя
-    battle_log = simulate_battle(att_state, def_state, settlement=settlement_var.get(), sudden_attack=sudden_attack_var.get(), log_active=True)
+    battle_log = simulate_battle(att_state, def_state, settlement=settlement_var.get(), sudden_attack=sudden_attack_var.get(), sudden_attack_4max=sudden_attack_4max_var.get(), sardaukar_attack=sardaukar_attack_var.get(), worm_attack_normal=worm_attack_normal_var.get(), worm_attack_shai=worm_attack_shai_var.get(), ongoing_attack=ongoing_attack_var.get(), log_active=True)
     # Отображение лога боя в новом окне
     log_window = tk.Toplevel(root)
     log_window.title(text[current_lang]['battle_log_title'])
@@ -673,6 +846,10 @@ def switch_language():
     attacker_normal_leader_label.config(text=text[current_lang]['normal_leaders'])
     attacker_cards_label.config(text=text[current_lang]['cards'])
     sudden_attack_check.config(text=text[current_lang]['sudden_attack'])
+    sardaukar_attack_check.config(text=text[current_lang]['sardaukar_attack'])
+    sudden_attack_4max_check.config(text=text[current_lang]['sudden_attack_4max'])
+    worm_attack_normal_check.config(text=text[current_lang]['worm_attack_normal'])
+    worm_attack_shai_check.config(text=text[current_lang]['worm_attack_shai'])
     defender_settlement_label.config(text=text[current_lang]['settlement_dice'])
     att_af_leaders_label.config(text=text[current_lang]['atreides_fremen_leaders'])
     att_hc_leaders_label.config(text=text[current_lang]['harkonnen_corino_leaders'])
@@ -714,18 +891,30 @@ defender_cards_var = tk.IntVar(value=0)
 # Прочие флажки и переменные
 defender_settlement_var = tk.IntVar(value=0)    # кубы поселения у защитника
 sudden_attack_var = tk.BooleanVar(value=False)  # внезапная атака
+ongoing_attack_var = tk.BooleanVar(value=False) # +1 атака
+sardaukar_attack_var = tk.BooleanVar(value=False)  # атака сардаукарами
+sudden_attack_4max_var = tk.BooleanVar(value=False)  # внезапная атака (4 max)
+worm_attack_normal_var = tk.BooleanVar(value=False)  # атака червями (обычная)
+worm_attack_shai_var = tk.BooleanVar(value=False)  # атака червями (Шай-Хулуд)
 settlement_var = tk.BooleanVar(value=False)     # атака на поселение (штраф для атакующего)
 
-# Ограничение: у защитника суммарно <= 6 отрядов (следим за спинбоксами)
-def update_defender_count(var, others):
-    total = var.get() + sum(v.get() for v in others)
-    if total > 6:
-        var.set(max(0, 6 - sum(v.get() for v in others)))
-        messagebox.showerror(text[current_lang]['error_title'], text[current_lang]['units_limit_error'])
+attack_modes = {
+    'sudden': sudden_attack_var,
+    'ongoing': ongoing_attack_var,
+    'sardaukar': sardaukar_attack_var,
+    'sudden_4max': sudden_attack_4max_var
+}
 
-defender_normal_var.trace_add('write', lambda *args: update_defender_count(defender_normal_var, [defender_elite_var, defender_special_elite_var]))
-defender_elite_var.trace_add('write', lambda *args: update_defender_count(defender_elite_var, [defender_normal_var, defender_special_elite_var]))
-defender_special_elite_var.trace_add('write', lambda *args: update_defender_count(defender_special_elite_var, [defender_normal_var, defender_elite_var]))
+for key, var in attack_modes.items():
+    others = [v for k, v in attack_modes.items() if k != key]
+    var.trace_add(
+        'write',
+        lambda *args, v=var, others=others: v.get() and [o.set(False) for o in others]
+    )
+
+worm_attack_normal_var.trace_add('write', lambda *args: worm_attack_shai_var.set(False) if worm_attack_normal_var.get() else None)
+worm_attack_shai_var.trace_add('write', lambda *args: worm_attack_normal_var.set(False) if worm_attack_shai_var.get() else None)
+
 
 # Поля ввода для атакующей стороны
 attacker_normal_label = ttk.Label(att_frame, text=text[current_lang]['normal_units'])
@@ -744,7 +933,16 @@ attacker_cards_label = ttk.Label(att_frame, text=text[current_lang]['cards'])
 attacker_cards_label.grid(row=4, column=0, sticky="e")
 ttk.Spinbox(att_frame, from_=0, to=10, textvariable=attacker_cards_var, width=5).grid(row=4, column=1)
 sudden_attack_check = ttk.Checkbutton(att_frame, text=text[current_lang]['sudden_attack'], variable=sudden_attack_var)
-sudden_attack_check.grid(row=5, column=0, padx=0, pady=5, sticky="w")
+sudden_attack_check.grid(row=5, column=0, columnspan=2, padx=0, pady=0, sticky="w")
+sudden_attack_4max_check = ttk.Checkbutton(att_frame, text=text[current_lang]['sudden_attack_4max'], variable=sudden_attack_4max_var)
+sudden_attack_4max_check.grid(row=6, column=0, columnspan=2, padx=0, pady=0, sticky="w")
+ttk.Checkbutton(att_frame, text=text[current_lang]['ongoing_attack'], variable=ongoing_attack_var).grid(row=7, column=0, sticky="w", padx=0, pady=0)
+sardaukar_attack_check = ttk.Checkbutton(att_frame, text=text[current_lang]['sardaukar_attack'], variable=sardaukar_attack_var)
+sardaukar_attack_check.grid(row=8, column=0, columnspan=2, padx=0, pady=0, sticky="w")
+worm_attack_normal_check = ttk.Checkbutton(att_frame, text=text[current_lang]['worm_attack_normal'], variable=worm_attack_normal_var)
+worm_attack_normal_check.grid(row=9, column=0, columnspan=2, padx=0, pady=0, sticky="w")
+worm_attack_shai_check = ttk.Checkbutton(att_frame, text=text[current_lang]['worm_attack_shai'], variable=worm_attack_shai_var)
+worm_attack_shai_check.grid(row=10, column=0, columnspan=2, padx=0, pady=0, sticky="w")
 
 # Поля ввода для защищающейся стороны
 defender_normal_label = ttk.Label(def_frame, text=text[current_lang]['normal_units'])
@@ -768,11 +966,11 @@ ttk.Spinbox(def_frame, from_=0, to=3, textvariable=defender_settlement_var, widt
 
 # Флажки выбора особых лидеров для атакующего
 att_special_vars = {name: tk.BooleanVar(value=False) for name in special_leaders_data.keys()}
-row_index = 6
+row_index = 11
 att_af_leaders_label = ttk.Label(att_frame, text=text[current_lang]['atreides_fremen_leaders'])
 att_af_leaders_label.grid(row=row_index, column=0, columnspan=2, sticky="w", pady=(5, 0))
 row_index += 1
-for name in ["Paul Atreides", "Paul Muad'Dib", "Lady Jessica", "Mother Jessica", "Gurney Halleck", "Alia", "Stilgar", "Chani"]:
+for name in ["Paul Atreides", "Paul Muad'Dib", "Lady Jessica", "Mother Jessica", "Gurney Halleck", "Alia", "Stilgar", "Chani", "Stabban Tuek"]:
     ttk.Checkbutton(att_frame, text=name, variable=att_special_vars[name]).grid(row=row_index, column=0, columnspan=2, sticky="w")
     row_index += 1
 att_hc_leaders_label = ttk.Label(att_frame, text=text[current_lang]['harkonnen_corino_leaders'])
@@ -788,7 +986,7 @@ row_index = 6
 def_af_leaders_label = ttk.Label(def_frame, text=text[current_lang]['atreides_fremen_leaders'])
 def_af_leaders_label.grid(row=6, column=0, columnspan=2, sticky="w", pady=(15, 0))
 row_index += 1
-for name in ["Paul Atreides", "Paul Muad'Dib", "Lady Jessica", "Mother Jessica", "Gurney Halleck", "Alia", "Stilgar", "Chani"]:
+for name in ["Paul Atreides", "Paul Muad'Dib", "Lady Jessica", "Mother Jessica", "Gurney Halleck", "Alia", "Stilgar", "Chani", "Stabban Tuek"]:
     ttk.Checkbutton(def_frame, text=name, variable=def_special_vars[name]).grid(row=row_index, column=0, columnspan=2, sticky="w")
     row_index += 1
 def_hc_leaders_label = ttk.Label(def_frame, text=text[current_lang]['harkonnen_corino_leaders'])
